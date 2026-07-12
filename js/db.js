@@ -19,7 +19,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_HUGLP4LIP1JF6KfOGBuyDg_uPAXoWu2";
 
 const LAST_TECH_KEY = "atelierProcess_lastTech";
 const LAST_QTECH_KEY = "atelierProcess_lastQualityTech";
-const SESSION_PROCESS_KEY = "atelierProcess_sessionProcess";
+const SESSION_PROCESS_KEY = "atelierProcess_sessionProcess"; 
 const SESSION_QUALITY_KEY = "atelierProcess_sessionQuality";
 
 let sb = null;
