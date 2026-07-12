@@ -15,7 +15,7 @@
 ============================================================================ */
 
 const SUPABASE_URL = "https://oqppecwtdllvqbrxeuho.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_HUGLP4LIP1JF6KfOGBuyDg_uPAXoWu2";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xcHBlY3d0ZGxsdnFicnhldWhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODY3NjAsImV4cCI6MjA5OTQ2Mjc2MH0.Ce6xUSFDpZGijWvBwLjC12B2i0dQ50orI3eOVdxXcBE";
 
 const LAST_TECH_KEY = "atelierProcess_lastTech";
 const LAST_QTECH_KEY = "atelierProcess_lastQualityTech";
