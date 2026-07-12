@@ -14,8 +14,8 @@
    de ton projet Supabase (Project Settings → API) avant de publier le site :
 ============================================================================ */
 
-const SUPABASE_URL = "https://VOTRE-PROJET.supabase.co";
-const SUPABASE_ANON_KEY = "VOTRE_CLE_ANON_PUBLIQUE";
+const SUPABASE_URL = "https://oqppecwtdllvqbrxeuho.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_HUGLP4LIP1JF6KfOGBuyDg_uPAXoWu2";
 
 const LAST_TECH_KEY = "atelierProcess_lastTech";
 const LAST_QTECH_KEY = "atelierProcess_lastQualityTech";
