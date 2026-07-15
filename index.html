@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Atelier Process — Traçabilité Airbag</title>
+
+<!-- Fonts (Premium) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@300;400;500;600;700;800&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
+
+<!-- Thème (sombre par défaut) — appliqué AVANT le premier rendu pour éviter tout flash -->
+<script>
+  (function () {
+    var saved = localStorage.getItem("atelier-theme");
+    window.__ATELIER_THEME__ = saved === "light" ? "light" : "dark";
+    if (window.__ATELIER_THEME__ === "light") {
+      document.documentElement.classList.add("theme-light");
+    }
+  })();
+</script>
+<style>html{background:#07070b}html.theme-light{background:#f7f7f5}</style>
+
+<!-- Tailwind CDN (JIT) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      colors: (function () {
+        var themeDark = {
+          transparent: 'transparent',
+          current: 'currentColor',
+          white: '#ffffff',
+          black: '#000000',
+          slate: {
+            50: '#0e0e13', 100: '#17171d', 200: '#242430', 300: '#33333f',
+            400: '#6d6d78', 500: '#8b8b96', 600: '#a9a9b3', 700: '#cdcdd5',
+            800: '#e4e4e9', 900: '#f5f5f6', 950: '#050507',
+          },
+          indigo: {
+            50: '#14173a', 100: '#1c2050', 200: '#333a7d', 300: '#a5b4fc', 400: '#818cf8',
+            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81',
+          },
+          emerald: {
+            50: '#0c2420', 100: '#123830', 200: '#1f5c4c', 300: '#6ee7b7', 400: '#34d399',
+            500: '#10b981', 600: '#059669', 700: '#047857', 800: '#065f46', 900: '#064e3b',
+          },
+          rose: {
+            50: '#2a141a', 100: '#3a1b23', 200: '#5c2530', 300: '#fda4af', 400: '#fb7185',
+            500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337',
+          },
+          red: {
+            50: '#2a141a', 100: '#3a1b23', 200: '#5c2530', 300: '#fda4af', 400: '#fb7185',
+            500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337',
+          },
+          amber: {
+            50: '#2b2110', 100: '#3a2c12', 200: '#5c4520', 300: '#fcd34d', 400: '#fbbf24',
+            500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e', 900: '#78350f',
+          },
+          orange: {
+            50: '#2b1d10', 100: '#3a2716', 200: '#5c3d20', 300: '#fdba74', 400: '#fb923c',
+            500: '#f97316', 600: '#ea580c', 700: '#c2410c', 800: '#9a3412', 900: '#7c2d12',
+          },
+        };
+        var themeLight = {
+          transparent: 'transparent',
+          current: 'currentColor',
+          white: '#ffffff',
+          black: '#000000',
+          slate: {
+            50: '#fbfbfa', 100: '#f5f5f4', 200: '#e7e5e4', 300: '#d6d3d1',
+            400: '#a1a1aa', 500: '#71717a', 600: '#52525b', 700: '#3f3f46',
+            800: '#27272a', 900: '#18181b', 950: '#09090b',
+          },
+          indigo: {
+            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8',
+            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81',
+          },
+          emerald: {
+            50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7', 400: '#34d399',
+            500: '#10b981', 600: '#059669', 700: '#047857', 800: '#065f46', 900: '#064e3b',
+          },
+          rose: {
+            50: '#fff1f3', 100: '#ffe4e9', 200: '#fecdd3', 300: '#fda4af', 400: '#fb7185',
+            500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337',
+          },
+          red: {
+            50: '#fff1f3', 100: '#ffe4e9', 200: '#fecdd3', 300: '#fda4af', 400: '#fb7185',
+            500: '#f43f5e', 600: '#e11d48', 700: '#be123c', 800: '#9f1239', 900: '#881337',
+          },
+          amber: {
+            50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d', 400: '#fbbf24',
+            500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e', 900: '#78350f',
+          },
+          orange: {
+            50: '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74', 400: '#fb923c',
+            500: '#f97316', 600: '#ea580c', 700: '#c2410c', 800: '#9a3412', 900: '#7c2d12',
+          },
+        };
+        return window.__ATELIER_THEME__ === "light" ? themeLight : themeDark;
+      })(),
+      extend: {
+        fontFamily: {
+          sans: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          display: ['Outfit', 'sans-serif'],
+          serif: ['"DM Serif Display"', 'serif'],
+        },
+        boxShadow: {
+          'premium-1': '0 1px 2px rgba(10,10,10,0.04)',
+          'premium-2': '0 1px 3px rgba(10,10,10,0.04), 0 4px 12px rgba(10,10,10,0.04)',
+          'premium-3': '0 4px 16px -4px rgba(10,10,10,0.08), 0 12px 32px -8px rgba(10,10,10,0.06)',
+          'premium-accent': '0 4px 16px -4px rgba(79,70,229,0.25), 0 12px 32px -8px rgba(79,70,229,0.15)',
+        },
+        borderRadius: {
+          'premium': '14px',
+        },
+      },
+    },
+  };
+</script>
+
+<link rel="stylesheet" href="css/style.css" />
+
+<!-- Supabase JS (client pour la base de données PARTAGÉE, hébergée dans le cloud) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body class="font-sans antialiased">
+
+  <div id="app-root"></div>
+
+  <!-- Notification toast globale -->
+  <div id="global-toast" class="fixed bottom-6 right-6 hidden bg-slate-950 border-l-4 border-rose-500 text-white text-xs font-semibold py-3 px-5 rounded-2xl shadow-premium-3 items-center gap-2.5 z-[100]">
+    <span id="global-toast-icon">●</span>
+    <span id="global-toast-msg"></span>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/views_process.js"></script>
+  <script src="js/views_quality.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
