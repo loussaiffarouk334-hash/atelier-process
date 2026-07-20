@@ -10,6 +10,7 @@ const SECTIONS = ["Section 1", "Section 2", "Section 3", "Section 4"];
 const CORR_TYPES = ["Correction Points", "Correction Tension"];
 const ROLES = [
   { value: "process", label: "Process" },
+  { value: "maintenance", label: "Maintenance" },
   { value: "qualite", label: "Qualité" },
   { value: "admin", label: "Administrateur" },
 ];

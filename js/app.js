@@ -17,6 +17,7 @@ const state = {
     programmes: { search: "" },
     machines: { search: "" },
     quality: { search: "", projet: "", dateFrom: "", dateTo: "" },
+    shifts: { month: new Date().toISOString().slice(0, 7), projet: "", ligne: "" },
   },
 };
 
@@ -139,6 +140,19 @@ function wireFilterInputs(data) {
       document.getElementById("machines-tbody").innerHTML = renderMachinesRows(rows);
     });
   }
+  if (state.screen === "process" && state.activePage === "shifts") {
+    const ids = ["shifts-month", "shifts-projet", "shifts-ligne"];
+    ids.forEach((elId) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.addEventListener("change", async () => {
+        state.filters.shifts.month = document.getElementById("shifts-month").value || state.filters.shifts.month;
+        state.filters.shifts.projet = document.getElementById("shifts-projet").value;
+        state.filters.shifts.ligne = document.getElementById("shifts-ligne").value;
+        await renderApp();
+      });
+    });
+  }
   if (state.screen === "quality") {
     const ids = ["quality-search", "quality-projet", "quality-date-from", "quality-date-to"];
     ids.forEach((elId) => {
@@ -245,8 +259,8 @@ document.addEventListener("click", async (e) => {
       break;
 
     case "nav":
-      // La page "users" est réservée à l'administrateur
-      if (btn.dataset.page === "users" && (!state.currentUser || state.currentUser.role !== "admin")) break;
+      // Les pages "users" et "export" (Administration) sont réservées à l'administrateur
+      if ((btn.dataset.page === "users" || btn.dataset.page === "export") && (!state.currentUser || state.currentUser.role !== "admin")) break;
       state.activePage = btn.dataset.page;
       state.mobileMenuOpen = false;
       state.drill = { level: "month", monthKey: null, dayKey: null, hourKey: null, minuteKey: null };

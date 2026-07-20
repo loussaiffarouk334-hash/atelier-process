@@ -5,12 +5,17 @@
 function PROCESS_NAV(state) {
   const isAdmin = !!(state && state.currentUser && state.currentUser.role === "admin");
   const adminItems = [];
-  if (isAdmin) adminItems.push({ key: "users", label: t("nav.users"), icon: "user" });
-  adminItems.push({ key: "export", label: t("nav.export"), icon: "save" });
+  // La page Export/Import (Administration) manipule l'intégralité de la base
+  // (reset, import/export JSON de toutes les tables) : réservée à l'admin.
+  if (isAdmin) {
+    adminItems.push({ key: "users", label: t("nav.users"), icon: "user" });
+    adminItems.push({ key: "export", label: t("nav.export"), icon: "save" });
+  }
   return [
     { section: t("nav.section.suivi"), items: [
       { key: "dashboard", label: t("nav.dashboard"), icon: "grid" },
       { key: "journal", label: t("nav.journal"), icon: "list" },
+      { key: "shifts", label: t("nav.shifts"), icon: "calendar" },
     ]},
     { section: t("nav.section.ref"), items: [
       { key: "programmes", label: t("nav.programs"), icon: "layers" },
@@ -57,6 +62,7 @@ function PAGE_TITLE(page) {
   return {
     dashboard: t("nav.dashboard"),
     journal: t("nav.journal"),
+    shifts: t("nav.shifts"),
     programmes: t("nav.programs"),
     machines: t("nav.machines"),
     users: t("nav.users"),
@@ -95,7 +101,7 @@ function renderProcessShell(state, data) {
           </div>
 
           <nav class="px-3 space-y-1">
-            ${PROCESS_NAV(state).map((sec) => `
+            ${PROCESS_NAV(state).filter((sec) => sec.items.length).map((sec) => `
               <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 py-2">${sec.section}</div>
               ${sec.items.map((it) => `
                 <button data-action="nav" data-page="${it.key}"
@@ -156,10 +162,11 @@ function renderPage(state, data) {
   switch (state.activePage) {
     case "dashboard": return renderDashboard(state, data);
     case "journal": return renderJournal(state, data);
+    case "shifts": return renderShiftsPage(state, data);
     case "programmes": return renderProgrammes(state, data);
     case "machines": return renderMachines(state, data);
     case "users": return (state.currentUser && state.currentUser.role === "admin") ? renderUsers(state, data) : renderDashboard(state, data);
-    case "export": return renderExportPage(state, data);
+    case "export": return (state.currentUser && state.currentUser.role === "admin") ? renderExportPage(state, data) : renderDashboard(state, data);
     default: return "";
   }
 }
@@ -234,27 +241,31 @@ function renderScrapBreadcrumb(drill, months) {
    l'action de l'intervention, efficace ou non, et le problème et la solution
    pour chaque problème".
 
-   Règle d'efficacité retenue (simple et explicable) : une intervention est
-   jugée "efficace" si AUCUNE autre intervention pour la même machine et la
-   même cause n'a été enregistrée dans les 7 jours suivants (pas de récidive).
-   Si le recul est encore < 7 jours depuis l'intervention, elle est marquée
-   "en observation" plutôt que jugée trop tôt.
+   Règle d'efficacité retenue (définition confirmée avec le terrain) :
+   une intervention est jugée "efficace" si son action pilote a résolu la
+   cause DÉFINITIVEMENT, c'est-à-dire si la même cause ne s'est JAMAIS
+   reproduite depuis sur la même machine (aucune limite de temps — on
+   regarde toutes les interventions futures, pas seulement les 7 jours
+   suivants). Si la cause revient un jour, même des mois plus tard,
+   l'intervention d'origine est rétroactivement marquée "récidive".
+   Une intervention très récente (< 3 jours) pour laquelle on n'a pas
+   encore assez de recul est marquée "en observation" plutôt que jugée
+   trop tôt.
 ============================================================================ */
 function computeInterventionEffectiveness(interventions) {
   const toDate = (i) => new Date(`${i.date}T${i.time || "00:00"}:00`);
   const now = new Date();
+  const OBSERVATION_MS = 3 * 24 * 3600 * 1000; // recul minimum avant de juger "efficace"
   return interventions.map((iv) => {
     const t0 = toDate(iv);
-    const cutoff = new Date(t0.getTime() + 7 * 24 * 3600 * 1000);
     const recurrence = interventions.some((other) => {
       if (other.id === iv.id) return false;
       if (other.machine_id !== iv.machine_id || other.cause !== iv.cause) return false;
-      const t1 = toDate(other);
-      return t1 > t0 && t1 <= cutoff;
+      return toDate(other) > t0; // n'importe quand après, sans limite de durée
     });
     let status = "effective";
     if (recurrence) status = "ineffective";
-    else if (now < cutoff) status = "pending";
+    else if (now.getTime() - t0.getTime() < OBSERVATION_MS) status = "pending";
     return { ...iv, effectiveness: status };
   });
 }
@@ -356,6 +367,262 @@ function renderInterventionAnalysis(interventions) {
                 <td class="py-2 px-3 text-right">${effectivenessBadge(iv.effectiveness)}</td>
               </tr>
             `).join("") : `<tr><td colspan="6" class="py-6 text-center text-slate-400">${t("analysis.empty")}</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================================
+   ANALYSE PAR SHIFT / LIGNE / PROJET
+   3 shifts de 8h : Shift 1 22h→6h (traverse minuit), Shift 2 6h→14h, Shift 3 14h→22h.
+   Le scrap est TOUJOURS compté à partir des déclarations qualité (scrap_declarations),
+   jamais depuis les interventions, conformément à la consigne métier.
+   Le "temps d'arrêt" est la somme des durées d'intervention (duration_minutes).
+============================================================================ */
+const SHIFT_DEFS = [
+  { key: "1", label: "Shift 1 · 22h–6h" },
+  { key: "2", label: "Shift 2 · 6h–14h" },
+  { key: "3", label: "Shift 3 · 14h–22h" },
+];
+function getShiftKey(timeStr) {
+  if (!timeStr) return null;
+  const hh = Number(timeStr.slice(0, 2));
+  if (isNaN(hh)) return null;
+  if (hh >= 22 || hh < 6) return "1";
+  if (hh >= 6 && hh < 14) return "2";
+  return "3";
+}
+function shiftLabel(key) {
+  const def = SHIFT_DEFS.find((s) => s.key === key);
+  return def ? def.label : "—";
+}
+function prevMonthKey(monthKey) {
+  const [y, m] = (monthKey || "").split("-").map(Number);
+  if (!y || !m) return monthKey;
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function monthHumanLabel(monthKey) {
+  const [y, m] = (monthKey || "").split("-").map(Number);
+  if (!y || !m) return monthKey || "—";
+  const lang = getLang();
+  return new Date(y, m - 1, 1).toLocaleDateString(lang === "en" ? "en-US" : "fr-FR", { month: "long", year: "numeric" });
+}
+/* Construit les compteurs (temps d'arrêt, nb interventions, efficacité, qté scrap)
+   groupés par projet+ligne+shift, à partir des interventions et des déclarations
+   scrap déjà filtrées sur la période/les filtres voulus. */
+function buildShiftStats(interventionsWithEff, scrapDeclarations) {
+  const map = new Map();
+  const ensure = (projet, ligne, shift) => {
+    const k = `${projet}||${ligne}||${shift}`;
+    if (!map.has(k)) map.set(k, { projet, ligne, shift, downtime: 0, interventionCount: 0, effectiveN: 0, effectiveJudged: 0, scrapQty: 0 });
+    return map.get(k);
+  };
+  interventionsWithEff.forEach((iv) => {
+    const shift = getShiftKey(iv.time);
+    if (!shift) return;
+    const row = ensure(iv.projet || "—", iv.ligne || "—", shift);
+    row.interventionCount += 1;
+    if (iv.duration_minutes !== null && iv.duration_minutes !== undefined && iv.duration_minutes !== "") row.downtime += Number(iv.duration_minutes) || 0;
+    if (iv.effectiveness && iv.effectiveness !== "pending") {
+      row.effectiveJudged += 1;
+      if (iv.effectiveness === "effective") row.effectiveN += 1;
+    }
+  });
+  // Scrap : toujours à partir des déclarations qualité, jamais des interventions.
+  scrapDeclarations.forEach((s) => {
+    const shift = getShiftKey(s.time);
+    if (!shift) return;
+    const row = ensure(s.projet || "—", s.ligne || "—", shift);
+    row.scrapQty += Number(s.qty) || 0;
+  });
+  return Array.from(map.values());
+}
+function shiftTotals(stats) {
+  const scrapQty = stats.reduce((s, r) => s + r.scrapQty, 0);
+  const interventionCount = stats.reduce((s, r) => s + r.interventionCount, 0);
+  const downtime = stats.reduce((s, r) => s + r.downtime, 0);
+  const judged = stats.reduce((s, r) => s + r.effectiveJudged, 0);
+  const eff = stats.reduce((s, r) => s + r.effectiveN, 0);
+  const effPct = judged ? Math.round((eff / judged) * 100) : null;
+  return { scrapQty, interventionCount, downtime, effPct };
+}
+function deltaBadge(curV, prevV, higherIsBetter, suffix = "") {
+  if (curV === null || curV === undefined || prevV === null || prevV === undefined) return `<span class="text-[10px] text-slate-400 font-mono">—</span>`;
+  const diff = curV - prevV;
+  if (diff === 0) return `<span class="text-[10px] text-slate-400 font-mono">= ${t("shifts.vsLastMonth")}</span>`;
+  const good = higherIsBetter ? diff > 0 : diff < 0;
+  const arrow = diff > 0 ? "▲" : "▼";
+  const color = good ? "text-emerald-600" : "text-rose-600";
+  const sign = diff > 0 ? "+" : "";
+  return `<span class="text-[10px] font-mono font-bold ${color}">${arrow} ${sign}${diff}${suffix} ${t("shifts.vsLastMonth")}</span>`;
+}
+function aggregateScrapBy(stats, keyFn) {
+  const m = new Map();
+  stats.forEach((r) => m.set(keyFn(r), (m.get(keyFn(r)) || 0) + r.scrapQty));
+  return m;
+}
+function bestOf(map, labelFn) {
+  if (!map.size) return null;
+  let best = null;
+  for (const [k, v] of map.entries()) {
+    if (best === null || v < best.v) best = { k, v };
+  }
+  return best ? { label: labelFn(best.k), qty: best.v } : null;
+}
+
+function renderShiftsPage(state, data) {
+  const f = state.filters.shifts;
+  const monthKey = f.month || new Date().toISOString().slice(0, 7);
+  const prevKey = prevMonthKey(monthKey);
+  const lignesAll = Array.from(new Set(data.machines.map((m) => m.ligne).filter(Boolean))).sort();
+
+  const allInterventionsEff = computeInterventionEffectiveness(data.interventions);
+  const inMonth = (row, mk) => (row.date || "").slice(0, 7) === mk;
+  const applyFilters = (rows) => rows.filter((r) => (!f.projet || r.projet === f.projet) && (!f.ligne || r.ligne === f.ligne));
+
+  const curInterventions = applyFilters(allInterventionsEff.filter((iv) => inMonth(iv, monthKey)));
+  const curScrap = applyFilters(data.scrapDeclarations.filter((s) => inMonth(s, monthKey)));
+  const prevInterventions = applyFilters(allInterventionsEff.filter((iv) => inMonth(iv, prevKey)));
+  const prevScrap = applyFilters(data.scrapDeclarations.filter((s) => inMonth(s, prevKey)));
+
+  const curStats = buildShiftStats(curInterventions, curScrap);
+  const prevStats = buildShiftStats(prevInterventions, prevScrap);
+  const curTotals = shiftTotals(curStats);
+  const prevTotals = shiftTotals(prevStats);
+
+  // Regroupement Projet -> Ligne -> Shift (avec lignes à 0 incluses pour la complétude)
+  const machineLignes = {};
+  data.machines.forEach((m) => {
+    if (!m.projet) return;
+    if (!machineLignes[m.projet]) machineLignes[m.projet] = new Set();
+    if (m.ligne) machineLignes[m.projet].add(m.ligne);
+  });
+  let projetList = Object.keys(machineLignes).sort();
+  if (f.projet) projetList = projetList.filter((p) => p === f.projet);
+
+  const statsFor = (projet, ligne, shift) => curStats.find((r) => r.projet === projet && r.ligne === ligne && r.shift === shift)
+    || { downtime: 0, interventionCount: 0, effectiveN: 0, effectiveJudged: 0, scrapQty: 0 };
+
+  const byShift = aggregateScrapBy(curStats, (r) => r.shift);
+  const byLigne = aggregateScrapBy(curStats, (r) => r.ligne);
+  const byProjet = aggregateScrapBy(curStats, (r) => r.projet);
+  const bestShift = bestOf(byShift, shiftLabel);
+  const bestLigne = bestOf(byLigne, (k) => k);
+  const bestProjet = bestOf(byProjet, (k) => k);
+
+  const kpiCard = (label, value, sub) => `
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+      <div class="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">${label}</div>
+      <div class="text-2xl font-display font-extrabold text-slate-900">${value}</div>
+      <div class="mt-1">${sub}</div>
+    </div>`;
+
+  const bestCard = (label, best, colorCls) => `
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg ${colorCls} flex items-center justify-center shrink-0">🏆</div>
+      <div class="min-w-0">
+        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${label}</div>
+        <div class="text-sm font-bold text-slate-800 truncate">${best ? esc(best.label) : "—"}</div>
+        <div class="text-[11px] text-slate-400 font-mono">${best ? `${best.qty} ${t("shifts.scrapUnit")}` : t("analysis.empty")}</div>
+      </div>
+    </div>`;
+
+  let rowsHtml = "";
+  projetList.forEach((projet) => {
+    let lignes = Array.from(machineLignes[projet]).sort();
+    if (f.ligne) lignes = lignes.filter((l) => l === f.ligne);
+    if (!lignes.length) return;
+    const projetScrap = lignes.reduce((s, l) => s + SHIFT_DEFS.reduce((s2, sh) => s2 + statsFor(projet, l, sh.key).scrapQty, 0), 0);
+    rowsHtml += `
+      <tr class="bg-slate-100">
+        <td colspan="6" class="py-2 px-3 font-display font-bold text-slate-700 text-xs">${esc(projet)} <span class="text-slate-400 font-normal font-sans">— ${projetScrap} ${t("shifts.scrapUnit")}</span></td>
+      </tr>`;
+    lignes.forEach((ligne) => {
+      const ligneRows = SHIFT_DEFS.map((sh) => statsFor(projet, ligne, sh.key));
+      const ligneTotal = { downtime: 0, interventionCount: 0, effectiveN: 0, effectiveJudged: 0, scrapQty: 0 };
+      ligneRows.forEach((r) => { ligneTotal.downtime += r.downtime; ligneTotal.interventionCount += r.interventionCount; ligneTotal.effectiveN += r.effectiveN; ligneTotal.effectiveJudged += r.effectiveJudged; ligneTotal.scrapQty += r.scrapQty; });
+      SHIFT_DEFS.forEach((sh, idx) => {
+        const r = statsFor(projet, ligne, sh.key);
+        const pct = r.effectiveJudged ? Math.round((r.effectiveN / r.effectiveJudged) * 100) : null;
+        rowsHtml += `
+        <tr class="hover:bg-slate-50 border-b border-slate-50">
+          ${idx === 0 ? `<td class="py-2 px-3 font-mono font-bold text-slate-700" rowspan="3">${esc(ligne)}</td>` : ""}
+          <td class="py-2 px-3 text-slate-500">${esc(sh.label)}</td>
+          <td class="py-2 px-3 text-right font-mono">${r.downtime} min</td>
+          <td class="py-2 px-3 text-right font-mono">${r.interventionCount}</td>
+          <td class="py-2 px-3 text-right font-mono font-bold ${r.scrapQty > 0 ? "text-rose-600" : "text-slate-400"}">${r.scrapQty}</td>
+          <td class="py-2 px-3 text-right font-mono font-bold ${pct === null ? "text-slate-400" : pct >= 70 ? "text-emerald-600" : pct >= 40 ? "text-amber-600" : "text-rose-600"}">${pct !== null ? pct + "%" : "—"}</td>
+        </tr>`;
+      });
+      const ligneEffPct = ligneTotal.effectiveJudged ? Math.round((ligneTotal.effectiveN / ligneTotal.effectiveJudged) * 100) : null;
+      rowsHtml += `
+      <tr class="bg-slate-50/70 border-b border-slate-200 font-bold text-slate-700">
+        <td class="py-2 px-3" colspan="2">${t("shifts.lineTotal")}</td>
+        <td class="py-2 px-3 text-right font-mono">${ligneTotal.downtime} min</td>
+        <td class="py-2 px-3 text-right font-mono">${ligneTotal.interventionCount}</td>
+        <td class="py-2 px-3 text-right font-mono ${ligneTotal.scrapQty > 0 ? "text-rose-600" : "text-slate-400"}">${ligneTotal.scrapQty}</td>
+        <td class="py-2 px-3 text-right font-mono">${ligneEffPct !== null ? ligneEffPct + "%" : "—"}</td>
+      </tr>`;
+    });
+  });
+
+  return `
+  <div class="space-y-5">
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">${t("shifts.month")}</label>
+        <input type="month" id="shifts-month" value="${esc(monthKey)}" class="bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Projet</label>
+        <select id="shifts-projet" class="bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+          <option value="">${t("shifts.allProjects")}</option>
+          ${PROJETS.map((p) => `<option value="${p}" ${f.projet === p ? "selected" : ""}>${p}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ligne</label>
+        <select id="shifts-ligne" class="bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+          <option value="">${t("shifts.allLignes")}</option>
+          ${lignesAll.map((l) => `<option value="${esc(l)}" ${f.ligne === l ? "selected" : ""}>${esc(l)}</option>`).join("")}
+        </select>
+      </div>
+      <p class="text-[11px] text-slate-400 ml-auto max-w-sm">${t("shifts.shiftDefinition")}</p>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      ${kpiCard(t("shifts.downtime"), curTotals.downtime + " min", deltaBadge(curTotals.downtime, prevTotals.downtime, false, " min"))}
+      ${kpiCard(t("shifts.interventions"), curTotals.interventionCount, deltaBadge(curTotals.interventionCount, prevTotals.interventionCount, false))}
+      ${kpiCard(t("shifts.scrapQty"), curTotals.scrapQty, deltaBadge(curTotals.scrapQty, prevTotals.scrapQty, false))}
+      ${kpiCard(t("shifts.effectiveness"), curTotals.effPct !== null ? curTotals.effPct + "%" : "—", deltaBadge(curTotals.effPct, prevTotals.effPct, true, "%"))}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      ${bestCard(t("shifts.bestShift"), bestShift, "bg-indigo-50")}
+      ${bestCard(t("shifts.bestLigne"), bestLigne, "bg-emerald-50")}
+      ${bestCard(t("shifts.bestProjet"), bestProjet, "bg-amber-50")}
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <h3 class="text-sm font-semibold text-slate-900 mb-1">${t("shifts.detailTitle")} — <span class="text-slate-400 font-normal">${monthHumanLabel(monthKey)}</span></h3>
+      <p class="text-[11.5px] text-slate-400 mb-3">${t("shifts.detailSub")}</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-600 border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-400 uppercase font-mono">
+              <th class="py-2 px-3">Ligne</th>
+              <th class="py-2 px-3">Shift</th>
+              <th class="py-2 px-3 text-right">${t("shifts.downtime")}</th>
+              <th class="py-2 px-3 text-right">${t("shifts.interventions")}</th>
+              <th class="py-2 px-3 text-right">${t("shifts.scrapQty")}</th>
+              <th class="py-2 px-3 text-right">${t("shifts.effectiveness")}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${rowsHtml || `<tr><td colspan="6" class="py-8 text-center text-slate-400">${t("analysis.empty")}</td></tr>`}
           </tbody>
         </table>
       </div>

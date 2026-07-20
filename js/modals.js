@@ -42,11 +42,14 @@ function modalIntervention(state, data) {
   const now = new Date();
   const machines = data.machines;
   const pns = Array.from(new Set(data.partNumbers.map((p) => p.part_number)));
+  // L'équipe "maintenance" n'intervient que sur les machines (jamais sur les
+  // programmes de couture) : le champ Type est verrouillé sur "Machine".
+  const isMaintenance = state.currentUser && state.currentUser.role === "maintenance";
 
   const v = item || {
     date: now.toISOString().slice(0, 10), time: now.toTimeString().slice(0, 5),
     technician: localStorage.getItem(LAST_TECH_KEY) || "", operator: "",
-    type: "Programme", machine_id: machines[0]?.machine_id || "", part_number: "", section: "",
+    type: isMaintenance ? "Machine" : "Programme", machine_id: machines[0]?.machine_id || "", part_number: "", section: "",
     corr_type: CORR_TYPES[0], before_val: 0, after_val: 0, cause: CAUSES_INTERVENTION[3],
     scrap: 0, scrap_qty: 0, comment: "", route_cause: "", action_pilote: "", duration_minutes: "",
     projet: PROJETS[0], ligne: machines[0]?.ligne || "",
@@ -62,7 +65,9 @@ function modalIntervention(state, data) {
         ${field("Heure", `<input type="time" name="time" required value="${v.time}" class="${inputCls}" />`, true)}
         ${field("Technicien", `<input type="text" name="technician" required value="${esc(v.technician)}" class="${inputCls}" />`, true)}
         ${field("Opérateur", `<input type="text" name="operator" value="${esc(v.operator)}" class="${inputCls}" />`)}
-        ${field("Type", `<select name="type" id="intervention-type" class="${inputCls}">
+        ${field("Type", isMaintenance
+            ? `<select name="type" id="intervention-type" class="${inputCls}"><option value="Machine" selected>Machine</option></select>`
+            : `<select name="type" id="intervention-type" class="${inputCls}">
             <option value="Programme" ${v.type === "Programme" ? "selected" : ""}>Programme</option>
             <option value="Machine" ${v.type === "Machine" ? "selected" : ""}>Machine</option>
           </select>`)}
@@ -82,7 +87,6 @@ function modalIntervention(state, data) {
         ${field("Après", `<input type="number" step="0.01" name="after_val" value="${v.after_val}" class="${inputCls} font-mono" />`)}
         ${field("Projet", `<select name="projet" class="${inputCls}">${PROJETS.map((p) => `<option value="${p}" ${v.projet === p ? "selected" : ""}>${p}</option>`).join("")}</select>`)}
         ${field("Ligne", `<input type="text" name="ligne" id="intervention-ligne-input" readonly value="${esc(v.ligne)}" class="bg-slate-100 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-500 font-mono font-bold cursor-not-allowed" />`)}
-        ${field(t("field.actionPilote"), `<input type="text" name="action_pilote" value="${esc(v.action_pilote)}" placeholder="Nom / équipe pilote de l'action" class="${inputCls}" />`)}
         ${field(t("field.duration"), `<input type="number" min="0" step="1" name="duration_minutes" value="${esc(v.duration_minutes)}" placeholder="ex: 45" class="${inputCls} font-mono" />`)}
       </div>
 
@@ -94,6 +98,7 @@ function modalIntervention(state, data) {
       </div>
 
       ${field(t("field.routeCause"), `<textarea name="route_cause" required rows="2" placeholder="Cause racine identifiée : pourquoi le problème est survenu" class="${inputCls}">${esc(routeCauseValue)}</textarea>`, true)}
+      ${field(t("field.actionPilote"), `<textarea name="action_pilote" required rows="2" placeholder="Action concrète réalisée pour résoudre ce problème (ex: remplacement du ressort tendeur, recalibrage du capteur...)" class="${inputCls}">${esc(v.action_pilote)}</textarea>`, true)}
 
       <div class="flex gap-2 justify-end pt-4 border-t border-slate-100">
         <button type="button" data-action="close-modal" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 px-4 rounded-lg cursor-pointer">Annuler</button>
@@ -217,7 +222,7 @@ function modalUser(state, data) {
           </label>
         </div>
       </div>
-      <p class="text-[11px] text-slate-400">Le mot de passe saisi ici sera immédiatement utilisable sur l'écran d'accueil pour déverrouiller l'espace <strong>${v.role === "qualite" ? "Qualité" : v.role === "admin" ? "Administration" : "Process"}</strong>.</p>
+      <p class="text-[11px] text-slate-400">Le mot de passe saisi ici sera immédiatement utilisable sur l'écran d'accueil pour déverrouiller l'espace <strong>${v.role === "qualite" ? "Qualité" : v.role === "admin" ? "Administration" : v.role === "maintenance" ? "Process (Maintenance — machines uniquement)" : "Process"}</strong>.</p>
       <div class="flex gap-2 justify-end pt-4 border-t border-slate-100">
         <button type="button" data-action="close-modal" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 px-4 rounded-lg cursor-pointer">Annuler</button>
         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-5 rounded-lg cursor-pointer">Enregistrer</button>

@@ -297,7 +297,11 @@ async function checkCredentials(role, username, password) {
   if (!data || data.length === 0) return null;
   const user = data[0];
   // L'administrateur a accès à tous les espaces (Process ET Qualité).
+  // L'équipe "maintenance" utilise le même portail d'entrée que "process"
+  // (elle n'intervient que sur les machines, pas sur les programmes — voir
+  // la restriction du champ "Type" dans le formulaire Nouvelle intervention).
   if (user.role === "admin" || user.role === role) return user;
+  if (role === "process" && user.role === "maintenance") return user;
   return null;
 }
 
