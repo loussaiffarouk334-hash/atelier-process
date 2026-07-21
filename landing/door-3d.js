@@ -16,6 +16,67 @@
   function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
   function easeOutQuart(t) { return 1 - Math.pow(1 - t, 4); }
 
+  // Dessine la texture "porte vitrée fumée" — utilisée à la fois par la scène
+  // 3D desktop (comme texture Three.js) et par l'intro mobile (comme canvas
+  // 2D affiché directement), pour garantir un rendu visuel identique.
+  function paintDoorPanelTexture(ctx, w, h, side) {
+    // Verre fumé (un peu plus clair pour qu'on lise la texture)
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "#2a2e36");
+    grad.addColorStop(0.5, "#3c4150");
+    grad.addColorStop(1, "#22252c");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    // Reflets obliques
+    ctx.globalCompositeOperation = "lighter";
+    const refl = ctx.createLinearGradient(0, 0, w, h);
+    refl.addColorStop(0, "rgba(255,170,110,0)");
+    refl.addColorStop(0.4, "rgba(255,170,110,0.30)");
+    refl.addColorStop(0.5, "rgba(255,220,180,0.50)");
+    refl.addColorStop(0.6, "rgba(255,170,110,0.30)");
+    refl.addColorStop(1, "rgba(255,170,110,0)");
+    ctx.fillStyle = refl;
+    ctx.fillRect(0, 0, w, h);
+    // Halo central (intérieur du bâtiment, plus prononcé)
+    const lamp = ctx.createRadialGradient(w * 0.5, h * 0.32, 12, w * 0.5, h * 0.32, w * 0.8);
+    lamp.addColorStop(0, "rgba(255,235,200,0.85)");
+    lamp.addColorStop(0.5, "rgba(255,220,180,0.35)");
+    lamp.addColorStop(1, "rgba(255,235,200,0)");
+    ctx.fillStyle = lamp;
+    ctx.fillRect(0, 0, w, h);
+    // Reflet bleu froid (sky)
+    const sky = ctx.createLinearGradient(0, 0, 0, h * 0.3);
+    sky.addColorStop(0, "rgba(140,180,255,0.18)");
+    sky.addColorStop(1, "rgba(140,180,255,0)");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = "source-over";
+    // Encadrement
+    ctx.strokeStyle = "#08090b";
+    ctx.lineWidth = Math.max(4, w * 0.035);
+    ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, w - ctx.lineWidth, h - ctx.lineWidth);
+    // Traverses horizontales
+    ctx.fillStyle = "#0a0c0f";
+    const barH = Math.max(2, h * 0.006);
+    const ys = [0.20, 0.38, 0.58, 0.78];
+    for (const fy of ys) ctx.fillRect(ctx.lineWidth, fy * h - barH / 2, w - ctx.lineWidth * 2, barH);
+    // Montant côté intérieur
+    const jamb = Math.max(2, w * 0.012);
+    if (side === +1) ctx.fillRect(0, ctx.lineWidth, jamb, h - ctx.lineWidth * 2);
+    else ctx.fillRect(w - jamb, ctx.lineWidth, jamb, h - ctx.lineWidth * 2);
+    // Poignée dorée
+    ctx.fillStyle = "#3a3d44";
+    const handleX = side < 0 ? w * 0.78 : w * 0.22;
+    const hw = Math.max(3, w * 0.016), hl = h * 0.11;
+    ctx.fillRect(handleX - hw / 2, h * 0.50 - hl / 2, hw, hl);
+    ctx.fillStyle = "#d4b78a";
+    ctx.beginPath(); ctx.arc(handleX, h * 0.50, w * 0.028, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,230,180,0.5)";
+    ctx.beginPath(); ctx.arc(handleX - w * 0.006, h * 0.50 - h * 0.003, w * 0.01, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a1c20";
+    ctx.beginPath(); ctx.arc(handleX, h * 0.50, w * 0.008, 0, Math.PI * 2); ctx.fill();
+  }
+
   // ---------- Construction de la scène ----------
   function buildIntro() {
     if (typeof THREE === "undefined") {
@@ -200,58 +261,7 @@
       const c = document.createElement("canvas");
       c.width = 512; c.height = 1024;
       const ctx = c.getContext("2d");
-      // Verre fumé (un peu plus clair pour qu'on lise la texture)
-      const grad = ctx.createLinearGradient(0, 0, 0, c.height);
-      grad.addColorStop(0, "#2a2e36");
-      grad.addColorStop(0.5, "#3c4150");
-      grad.addColorStop(1, "#22252c");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, c.width, c.height);
-      // Reflets obliques
-      ctx.globalCompositeOperation = "lighter";
-      const refl = ctx.createLinearGradient(0, 0, c.width, c.height);
-      refl.addColorStop(0, "rgba(255,170,110,0)");
-      refl.addColorStop(0.4, "rgba(255,170,110,0.30)");
-      refl.addColorStop(0.5, "rgba(255,220,180,0.50)");
-      refl.addColorStop(0.6, "rgba(255,170,110,0.30)");
-      refl.addColorStop(1, "rgba(255,170,110,0)");
-      ctx.fillStyle = refl;
-      ctx.fillRect(0, 0, c.width, c.height);
-      // Halo central (intérieur du bâtiment, plus prononcé)
-      const lamp = ctx.createRadialGradient(c.width * 0.5, c.height * 0.32, 12, c.width * 0.5, c.height * 0.32, c.width * 0.8);
-      lamp.addColorStop(0, "rgba(255,235,200,0.85)");
-      lamp.addColorStop(0.5, "rgba(255,220,180,0.35)");
-      lamp.addColorStop(1, "rgba(255,235,200,0)");
-      ctx.fillStyle = lamp;
-      ctx.fillRect(0, 0, c.width, c.height);
-      // Reflet bleu froid (sky)
-      const sky = ctx.createLinearGradient(0, 0, 0, c.height * 0.3);
-      sky.addColorStop(0, "rgba(140,180,255,0.18)");
-      sky.addColorStop(1, "rgba(140,180,255,0)");
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.globalCompositeOperation = "source-over";
-      // Encadrement
-      ctx.strokeStyle = "#08090b";
-      ctx.lineWidth = 18;
-      ctx.strokeRect(9, 9, c.width - 18, c.height - 18);
-      // Traverses horizontales
-      ctx.fillStyle = "#0a0c0f";
-      const ys = [0.20, 0.38, 0.58, 0.78];
-      for (const fy of ys) ctx.fillRect(9, fy * c.height - 3, c.width - 18, 6);
-      // Montant côté intérieur
-      if (side === +1) ctx.fillRect(0, 9, 6, c.height - 18);
-      else ctx.fillRect(c.width - 6, 9, 6, c.height - 18);
-      // Poignée dorée
-      ctx.fillStyle = "#3a3d44";
-      const handleX = side < 0 ? c.width * 0.78 : c.width * 0.22;
-      ctx.fillRect(handleX - 4, c.height * 0.50 - 55, 8, 110);
-      ctx.fillStyle = "#d4b78a";
-      ctx.beginPath(); ctx.arc(handleX, c.height * 0.50, 14, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(255,230,180,0.5)";
-      ctx.beginPath(); ctx.arc(handleX - 3, c.height * 0.50 - 3, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#1a1c20";
-      ctx.beginPath(); ctx.arc(handleX, c.height * 0.50, 4, 0, Math.PI * 2); ctx.fill();
+      paintDoorPanelTexture(ctx, c.width, c.height, side);
 
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -534,8 +544,204 @@
     }
   }
 
+  // ============================================================================
+  // INTRO MOBILE — expérience tactile dédiée, sans WebGL : légère, rapide à
+  // charger, et cadrée pour le format portrait (fini le recadrage "cover"
+  // agressif d'une photo pensée pour un écran large). Même identité visuelle
+  // que la version desktop (portes vitrées fumées, halo doré, particules,
+  // logo LEAR) mais entièrement en CSS/DOM pour un rendu fluide garanti sur
+  // tous les téléphones, y compris d'entrée de gamme.
+  // ============================================================================
+  function buildMobileIntro() {
+    const wrap = document.createElement("div");
+    wrap.id = INTRO_ID;
+    wrap.style.cssText = [
+      "position:fixed", "inset:0", "z-index:9999",
+      "background:#07070b", "overflow:hidden",
+      "-webkit-tap-highlight-color:transparent", "user-select:none",
+      "font-family:'Outfit','Inter',system-ui,sans-serif",
+    ].join(";");
+    document.body.appendChild(wrap);
+
+    // ----- Image de fond, cadrée pour le portrait, léger Ken Burns -----
+    const bg = document.createElement("div");
+    bg.style.cssText = [
+      "position:absolute", "inset:-4%", "z-index:0",
+      "background-image:url('assets/img/building.jpg')",
+      "background-size:cover", "background-position:66% 22%", "background-repeat:no-repeat",
+      "filter:brightness(0.60) saturate(1.08) contrast(1.08)",
+      "animation:doorKenBurns 15s ease-in-out infinite alternate",
+    ].join(";");
+    wrap.appendChild(bg);
+
+    // ----- Voile / vignette pour intégrer le HUD et assombrir les bords -----
+    const veil = document.createElement("div");
+    veil.style.cssText = [
+      "position:absolute", "inset:0", "z-index:1", "pointer-events:none",
+      "background:",
+      "linear-gradient(180deg, rgba(5,6,9,.85) 0%, rgba(5,6,9,.28) 20%, rgba(5,6,9,.16) 48%, rgba(5,6,9,.58) 74%, rgba(5,6,9,.96) 100%),",
+      "radial-gradient(ellipse 90% 60% at 50% 46%, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 70%, rgba(0,0,0,.85) 100%)",
+    ].join(";");
+    wrap.appendChild(veil);
+
+    // ----- Halo doré derrière la porte (s'intensifie à l'ouverture) -----
+    const glow = document.createElement("div");
+    glow.style.cssText = [
+      "position:absolute", "z-index:2", "left:50%", "top:47%",
+      "width:120vw", "height:120vw", "max-width:640px", "max-height:640px",
+      "transform:translate(-50%,-50%)", "border-radius:50%", "pointer-events:none",
+      "background:radial-gradient(circle, rgba(255,226,168,0) 0%, rgba(255,226,168,0) 70%)",
+      "opacity:0", "transition:opacity 1.1s ease",
+    ].join(";");
+    wrap.appendChild(glow);
+
+    // ----- Particules dorées (légères, en CSS pur — pas de boucle JS par frame) -----
+    const particleLayer = document.createElement("div");
+    particleLayer.style.cssText = "position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden";
+    for (let i = 0; i < 16; i++) {
+      const p = document.createElement("span");
+      const left = 28 + Math.random() * 44;
+      const size = 2 + Math.random() * 3;
+      const dur = 5 + Math.random() * 5;
+      const delay = (Math.random() * -dur).toFixed(2);
+      p.style.cssText = [
+        "position:absolute", `left:${left}%`, "bottom:-6%",
+        `width:${size}px`, `height:${size}px`, "border-radius:50%",
+        "background:#ffd58a", "box-shadow:0 0 6px 1px rgba(255,213,138,.8)", "opacity:0",
+        `animation:doorParticleRise ${dur}s ease-in ${delay}s infinite`,
+      ].join(";");
+      particleLayer.appendChild(p);
+    }
+    wrap.appendChild(particleLayer);
+
+    // ----- Scène de la porte (CSS 3D) -----
+    const stageWrap = document.createElement("div");
+    stageWrap.style.cssText = "position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-46%);perspective:1400px;width:min(78vw,340px);aspect-ratio:3/4.3;";
+    wrap.appendChild(stageWrap);
+
+    const frame = document.createElement("div");
+    frame.style.cssText = "position:absolute;inset:-3.5% -3.5% -1% -3.5%;z-index:0;border-radius:6px;background:linear-gradient(180deg,#141519,#0a0a0c);box-shadow:0 18px 50px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04);";
+    stageWrap.appendChild(frame);
+
+    const doorsInner = document.createElement("div");
+    doorsInner.style.cssText = "position:absolute;inset:0;z-index:1;transform-style:preserve-3d;";
+    stageWrap.appendChild(doorsInner);
+
+    function makeDoorHalf(side) {
+      const holder = document.createElement("div");
+      holder.style.cssText = [
+        "position:absolute", "top:0", "bottom:0",
+        side < 0 ? "left:0" : "right:0", "width:50%",
+        "transform-style:preserve-3d",
+        `transform-origin:${side < 0 ? "left" : "right"} center`,
+        "transition:transform 1.15s cubic-bezier(.65,0,.35,1)",
+        "box-shadow:0 0 30px rgba(0,0,0,.5)", "overflow:hidden", "border-radius:2px",
+      ].join(";");
+      const canvas = document.createElement("canvas");
+      canvas.width = 340; canvas.height = 976;
+      canvas.style.cssText = "display:block;width:100%;height:100%";
+      paintDoorPanelTexture(canvas.getContext("2d"), canvas.width, canvas.height, side);
+      holder.appendChild(canvas);
+      return holder;
+    }
+    const leftDoor = makeDoorHalf(-1);
+    const rightDoor = makeDoorHalf(+1);
+    doorsInner.appendChild(leftDoor);
+    doorsInner.appendChild(rightDoor);
+
+    // Faisceau de lumière derrière les portes, révélé à l'ouverture
+    const beam = document.createElement("div");
+    beam.style.cssText = "position:absolute;inset:6% 8%;z-index:-1;background:radial-gradient(ellipse at 50% 30%, rgba(255,242,194,.9) 0%, rgba(255,224,150,.35) 45%, rgba(255,224,150,0) 75%);opacity:0;transition:opacity 1s ease;border-radius:4px;";
+    doorsInner.appendChild(beam);
+
+    // Logo LEAR au-dessus de la porte
+    const logo = document.createElement("div");
+    logo.style.cssText = "position:absolute;left:50%;top:-15%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;z-index:4;";
+    logo.innerHTML = `
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#ef4444,#b91c1c);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 14px rgba(239,68,68,.5)">
+        <span style="color:#fff;font-weight:800;font-size:14px">L</span>
+      </div>
+      <span style="color:#fff;font-weight:600;font-size:14px;letter-spacing:-.2px;text-shadow:0 1px 6px rgba(0,0,0,.6)">LEAR</span>`;
+    stageWrap.appendChild(logo);
+
+    // ----- HUD -----
+    const hud = document.createElement("div");
+    hud.style.cssText = "position:absolute;inset:0;z-index:5;pointer-events:none;color:#e7e7ea;";
+    hud.innerHTML = `
+      <div style="position:absolute;top:calc(20px + env(safe-area-inset-top));left:20px;right:20px">
+        <div style="font-size:9.5px;letter-spacing:.28em;text-transform:uppercase;color:#9ca3af;font-weight:500">Atelier Process</div>
+        <div style="font-size:15px;font-weight:600;color:#fff;letter-spacing:-.2px;margin-top:2px">LEAR · Traçabilité Airbag</div>
+      </div>
+      <div id="${HINT_ID}" style="position:absolute;left:50%;transform:translateX(-50%);bottom:calc(56px + env(safe-area-inset-bottom));text-align:center;transition:opacity .5s ease;width:100%;padding:0 24px">
+        <div style="display:inline-flex;align-items:center;gap:9px;padding:12px 24px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(15,17,22,.55);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 4px 20px rgba(0,0,0,.4)">
+          <span style="position:relative;display:inline-flex;width:9px;height:9px">
+            <span style="position:absolute;inset:0;border-radius:50%;background:#10b981;box-shadow:0 0 12px #10b981"></span>
+            <span style="position:absolute;inset:-6px;border-radius:50%;border:1.5px solid #10b981;opacity:.6;animation:doorTapPulse 1.6s ease-out infinite"></span>
+          </span>
+          <span style="font-size:12.5px;color:#fff;font-weight:600;letter-spacing:.01em">Touchez la porte pour entrer</span>
+        </div>
+      </div>
+      <div style="position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:20px;right:20px;text-align:center">
+        <span style="font-size:9px;letter-spacing:.22em;text-transform:uppercase;color:#7b7f88">© LEAR Corporation</span>
+      </div>`;
+    wrap.appendChild(hud);
+
+    // ----- Keyframes CSS -----
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `
+      @keyframes doorKenBurns { 0%{transform:scale(1.04) translate(0,0)} 100%{transform:scale(1.12) translate(-1.2%,-1%)} }
+      @keyframes doorParticleRise { 0%{opacity:0; transform:translateY(0) scale(.6)} 12%{opacity:.9} 85%{opacity:.5} 100%{opacity:0; transform:translateY(-92vh) scale(1)} }
+      @keyframes doorTapPulse { 0%{transform:scale(.7);opacity:.7} 100%{transform:scale(2.6);opacity:0} }
+    `;
+    wrap.appendChild(styleEl);
+
+    // ----- Interaction : toute la scène est tactile (grande zone de tap) -----
+    let opened = false;
+    function openDoor() {
+      if (opened) return;
+      opened = true;
+      if (navigator.vibrate) { try { navigator.vibrate(14); } catch (e) {} }
+      const hint = document.getElementById(HINT_ID);
+      if (hint) hint.style.opacity = "0";
+      leftDoor.style.transform = "rotateY(-108deg)";
+      rightDoor.style.transform = "rotateY(108deg)";
+      beam.style.opacity = "1";
+      glow.style.opacity = "1";
+      glow.style.background = "radial-gradient(circle, rgba(255,226,168,.55) 0%, rgba(255,226,168,.18) 45%, rgba(255,226,168,0) 72%)";
+      setTimeout(finishMobileIntro, 1150);
+    }
+    const tapZone = document.createElement("div");
+    tapZone.style.cssText = "position:absolute;inset:0;z-index:6;cursor:pointer;";
+    tapZone.addEventListener("click", openDoor);
+    wrap.appendChild(tapZone);
+
+    function finishMobileIntro() {
+      const flash = document.createElement("div");
+      flash.style.cssText = "position:absolute;inset:0;z-index:8;background:radial-gradient(circle at 50% 44%, #fff7d6 0%, #fff2c2 25%, rgba(255,242,194,0) 68%);opacity:0;pointer-events:none;transition:opacity .7s ease";
+      wrap.appendChild(flash);
+      requestAnimationFrame(() => { flash.style.opacity = "1"; });
+      setTimeout(() => {
+        wrap.style.transition = "opacity .85s ease";
+        wrap.style.opacity = "0";
+        setTimeout(() => {
+          wrap.remove();
+          window.dispatchEvent(new Event("resize"));
+        }, 900);
+      }, 300);
+      try { localStorage.setItem("atelier-door-seen", "1"); } catch (e) {}
+    }
+  }
+
   // ---------- Lancement ----------
   function init() {
+    // Mobile / petit écran : expérience dédiée, légère (sans WebGL), pensée
+    // pour le tactile — l'intro 3D desktop reste inchangée pour les grands
+    // écrans (image "cover" + caméra 3D calibrées pour le format large).
+    const isMobile = window.matchMedia("(max-width: 860px)").matches;
+    if (isMobile) {
+      buildMobileIntro();
+      return;
+    }
     if (window.THREE) { buildIntro(); return; }
     const s = document.createElement("script");
     s.src = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js";
@@ -547,3 +753,4 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
